@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Play, Pause, Bell, FileText, Clock, CheckCircle, AlertTriangle } from "lucide-react"
+import { Play, Pause, Bell, FileText, Clock, CheckCircle, AlertTriangle, Check } from "lucide-react" // Importar Check icon
 import * as XLSX from "xlsx"
 import {
   BarChart as RechartsBarChart,
@@ -15,7 +15,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
-import Image from "next/image" // Importar el componente Image de Next.js
+import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,27 +29,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface Guide {
-  guideNumber: string
-  guidePrefix: string
-  guideSuffix: string
+  guideNumber: string // Formato completo ej: "071-57197840"
+  guidePrefix: string // Primeros 3 caracteres ej: "071"
+  guideSuffix: string // Resto sin guión ej: "57197840"
   status: "pending" | "arrived"
   lastChecked?: Date
   arrivedAt?: Date
   tcaData?: TCAGuideData
-  trackingHistory: any[]
-}
-
-interface DailySummary {
-  date: string
-  arrived: number
-  pending: number
-}
-
-interface NotificationSettings {
-  emailEnabled: boolean
-  emailAddress: string
-  soundEnabled: boolean
-  checkInterval: number
+  trackingHistory?: any[]
 }
 
 interface TCAGuideData {
@@ -64,33 +51,34 @@ interface TCAGuideData {
   kilos: number
 }
 
-const statusConfig: {
-  [key: string]: {
-    label: string
-    color: string
-    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
-  }
-} = {
-  pending: {
-    label: "Pendiente",
-    color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-    icon: Clock,
-  },
-  arrived: {
-    label: "Lista",
-    color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-    icon: CheckCircle,
-  },
+interface NotificationSettings {
+  emailEnabled: boolean
+  emailAddress: string
+  soundEnabled: boolean
+  checkInterval: number // en minutos
 }
 
-export default function Home() {
+interface DailySummary {
+  date: string // YYYY-MM-DD
+  arrived: number
+  pending: number
+}
+
+const statusConfig = {
+  pending: { label: "Pendiente", color: "bg-primary text-primary-foreground", icon: Clock }, // Azul oscuro
+  arrived: { label: "Lista", color: "bg-accent text-accent-foreground", icon: CheckCircle }, // Naranja
+}
+
+export default function TCAGuideTracker() {
   const [guides, setGuides] = useState<Guide[]>([])
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [notifications, setNotifications] = useState<string[]>([])
-  const [historyData, setHistoryData] = useState<DailySummary[]>([]) // Nuevo estado para el historial
+  const [historyData, setHistoryData] = useState<DailySummary[]>([])
+  const [verifiedCount, setVerifiedCount] = useState(0) // Nuevo estado para el contador de verificadas
+  const [totalGuidesToVerify, setTotalGuidesToVerify] = useState(0) // Nuevo estado para el total a verificar
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const [settings, setSettings] = useState<NotificationSettings>({
@@ -100,7 +88,6 @@ export default function Home() {
     checkInterval: 5, // 5 minutos por defecto
   })
 
-  // Cargar historial desde localStorage al inicio
   useEffect(() => {
     const storedHistory = localStorage.getItem("flightTrackerHistory")
     if (storedHistory) {
@@ -108,7 +95,6 @@ export default function Home() {
     }
   }, [])
 
-  // Guardar historial en localStorage cada vez que cambie
   useEffect(() => {
     localStorage.setItem("flightTrackerHistory", JSON.stringify(historyData))
   }, [historyData])
@@ -128,14 +114,11 @@ export default function Home() {
 
       const parsedGuides: Guide[] = jsonData
         .filter((row: any) => {
-          // Filtrar solo filas que tengan número de guía válido
           const guideNumber = (row["GUIA"] || row["Guía"] || row["Guide"] || "").toString().trim()
           return guideNumber && guideNumber.length > 0 && guideNumber !== ""
         })
         .map((row: any) => {
           const fullGuideNumber = (row["GUIA"] || row["Guía"] || row["Guide"] || "").toString().trim()
-
-          // Separar los primeros 3 caracteres del resto
           const guidePrefix = fullGuideNumber.substring(0, 3)
           const guideSuffix = fullGuideNumber.substring(3).replace("-", "")
 
@@ -148,7 +131,6 @@ export default function Home() {
           }
         })
 
-      // Mostrar información sobre las filas procesadas
       console.log(`Total de filas en Excel: ${jsonData.length}`)
       console.log(`Filas con guías válidas: ${parsedGuides.length}`)
       console.log(`Filas vacías ignoradas: ${jsonData.length - parsedGuides.length}`)
@@ -162,16 +144,12 @@ export default function Home() {
     }
   }
 
-  // Simulación de consulta al portal TCA basada en las imágenes reales
-  // Esta función ahora es una simulación pura para el preview
   const simulateTCAQuery = useCallback(
     async (prefix: string, suffix: string): Promise<{ success: boolean; error?: string; data?: TCAGuideData }> => {
-      // Simular tiempo de consulta
       await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000))
 
       const fullGuideNumber = `${prefix}-${suffix}`
 
-      // Lógica específica para la guía 045-12195385 (siempre pendiente en simulación)
       if (fullGuideNumber === "045-12195385") {
         return {
           success: false,
@@ -179,17 +157,14 @@ export default function Home() {
         }
       }
 
-      // Lógica aleatoria para otras guías
       const random = Math.random()
 
       if (random < 0.6) {
-        // Simular pantalla de error: "ERROR - Guía no encontrada"
         return {
           success: false,
           error: "GUIA NO ENCONTRADA",
         }
       } else {
-        // Simular pantalla con información completa (guía arribada)
         const mockData: TCAGuideData = {
           operacion: "Importación",
           docIngreso: `2025-73-MANI-${suffix.substring(0, 5)}-F`,
@@ -209,18 +184,19 @@ export default function Home() {
       }
     },
     [],
-  ) // Dependencias vacías porque es una simulación
+  )
 
   const checkAllGuides = useCallback(async () => {
     if (guides.length === 0) return
 
     setLoading(true)
+    setVerifiedCount(0) // Resetear contador al inicio
+    setTotalGuidesToVerify(guides.length) // Establecer total
     const updatedGuides = [...guides]
     const newNotifications: string[] = []
     let currentArrivedCount = 0
     let currentPendingCount = 0
 
-    // Procesar solo las guías del Excel, fila por fila
     for (let i = 0; i < updatedGuides.length; i++) {
       const guide = updatedGuides[i]
       const previousStatus = guide.status
@@ -228,24 +204,16 @@ export default function Home() {
       try {
         console.log(`Verificando guía ${i + 1}/${guides.length}: ${guide.guideNumber}`)
 
-        // *** CAMBIO CLAVE: Llamada a la API Route en lugar de la simulación local ***
-        // Para el preview, volvemos a la simulación local para que funcione.
-        // Para la versión real, usarías:
-        // const response = await fetch("/api/check-tca-guide", { ... });
-        // const result = await response.json();
         const result = await simulateTCAQuery(guide.guidePrefix, guide.guideSuffix)
-        // *** FIN CAMBIO CLAVE ***
 
         const now = new Date()
         let newStatus: Guide["status"] = "pending"
 
         if (result.success && result.data) {
-          // Si hay datos = pantalla con información = guía arribada
           newStatus = "arrived"
           updatedGuides[i].tcaData = result.data
           currentArrivedCount++
         } else {
-          // Si hay error = pantalla "Guía no encontrada" = pendiente
           newStatus = "pending"
           currentPendingCount++
         }
@@ -257,25 +225,20 @@ export default function Home() {
           arrivedAt: newStatus === "arrived" && previousStatus !== "arrived" ? now : guide.arrivedAt,
         }
 
-        // Notificar solo cuando una guía cambie de pendiente a arribada
         if (newStatus === "arrived" && previousStatus !== "arrived") {
           const notification = `✅ Guía ${guide.guideNumber} está LISTA para retirar!`
           newNotifications.push(notification)
 
-          // Simular envío de email (en preview, solo log)
           if (settings.emailEnabled && settings.emailAddress) {
             console.log(`📧 Email simulado enviado a ${settings.emailAddress} para guía ${guide.guideNumber}`)
-            // Para la versión real, usarías:
-            // await fetch("/api/send-notification", { ... });
           }
 
-          // Reproducir sonido si está habilitado
           if (settings.soundEnabled) {
             playNotificationSound()
           }
         }
 
-        // Pausa entre consultas
+        setVerifiedCount(i + 1) // Actualizar contador de verificadas
         await new Promise((resolve) => setTimeout(resolve, 800))
       } catch (err) {
         console.error(`Error verificando guía ${guide.guideNumber}:`, err)
@@ -286,6 +249,7 @@ export default function Home() {
         }
         currentPendingCount++
         setError(`Error al verificar guía ${guide.guideNumber}. Consulta la consola para más detalles.`)
+        setVerifiedCount(i + 1) // Asegurarse de que el contador avance incluso con errores
       }
     }
 
@@ -293,8 +257,7 @@ export default function Home() {
     setNotifications((prev) => [...prev, ...newNotifications])
     setLastUpdate(new Date())
 
-    // Actualizar historial
-    const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10)
     setHistoryData((prevHistory) => {
       const existingEntryIndex = prevHistory.findIndex((entry) => entry.date === today)
       if (existingEntryIndex > -1) {
@@ -311,11 +274,10 @@ export default function Home() {
     })
 
     setLoading(false)
-  }, [guides, simulateTCAQuery, settings.emailEnabled, settings.emailAddress, settings.soundEnabled]) // Dependencias para useCallback
+  }, [guides, simulateTCAQuery, settings.emailEnabled, settings.emailAddress, settings.soundEnabled])
 
   const playNotificationSound = () => {
     try {
-      // Crear un sonido de notificación simple
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
       const oscillator = audioContext.createOscillator()
       const gainNode = audioContext.createGain()
@@ -346,16 +308,14 @@ export default function Home() {
     setIsMonitoring(true)
     setError(null)
 
-    // Verificar inmediatamente
     checkAllGuides()
 
-    // Configurar intervalo de verificación
     intervalRef.current = setInterval(
       () => {
         checkAllGuides()
       },
       settings.checkInterval * 60 * 1000,
-    ) // Convertir minutos a milisegundos
+    )
   }
 
   const stopMonitoring = () => {
@@ -370,7 +330,6 @@ export default function Home() {
     setNotifications([])
   }
 
-  // Crear datos de ejemplo para demostración
   const createSampleData = () => {
     const sampleGuides: Guide[] = [
       {
@@ -386,7 +345,7 @@ export default function Home() {
         status: "pending",
       },
       {
-        guideNumber: "045-12195385", // Esta guía ahora se verificará realmente
+        guideNumber: "045-12195385",
         guidePrefix: "045",
         guideSuffix: "12195385",
         status: "pending",
@@ -430,8 +389,6 @@ export default function Home() {
 
       <Tabs defaultValue="monitor" className="space-y-6">
         <TabsList className="bg-secondary rounded-lg">
-          {" "}
-          {/* Añadido rounded-lg aquí */}
           <TabsTrigger
             value="monitor"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md"
@@ -543,7 +500,9 @@ export default function Home() {
                 {loading && (
                   <Alert className="bg-primary/10 text-primary border-primary rounded-lg">
                     <Clock className="h-4 w-4" />
-                    <AlertDescription>Verificando guías... Procesando fila por fila</AlertDescription>
+                    <AlertDescription>
+                      Verificando guías... {verifiedCount}/{totalGuidesToVerify} procesadas
+                    </AlertDescription>
                   </Alert>
                 )}
               </div>
@@ -611,10 +570,13 @@ export default function Home() {
                           return (
                             <TableRow key={index} className="border-border hover:bg-accent/10">
                               <TableCell className="font-medium">
-                                <div>
-                                  <div className="font-bold">{guide.guideNumber}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {guide.guidePrefix} - {guide.guideSuffix}
+                                <div className="flex items-center gap-2">
+                                  {guide.lastChecked && <Check className="h-4 w-4 text-green-500" />}
+                                  <div>
+                                    <div className="font-bold">{guide.guideNumber}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {guide.guidePrefix} - {guide.guideSuffix}
+                                    </div>
                                   </div>
                                 </div>
                               </TableCell>
